@@ -13,18 +13,25 @@ import torch.nn as nn
 import torch.nn.functional as F
 import tqdm
 import matplotlib.pyplot as plt
-# from apex import amp
 import torch.optim as optim
+# from apex import amp
+
 # from core.model_cas import Model, Loss
 from utils.preproc import to_channel_first, resize, random_crop, recursive_apply, image_net_center_inv
 # import data.dtu as dtu, data.sceneflow as sf, data.blended as bld
 from utils.io_utils import load_model, subplot_map, write_pfm
 
+
 import wandb
+
+# wandb.init(project="Vis-MVSNet_MVG", entity="kaktusava")
+# wandb.init(project="Vis-MVSNet_sk3d", entity="vis-mvsnet-mvg", name="sk3d_32000_valpart")
+
 
 parser = argparse.ArgumentParser()
 
 parser.add_argument('--data_root', type=str, help='The root dir of the data.')
+parser.add_argument('--list_dir', type=str, help='The list dir of the data.')
 parser.add_argument('--dataset_name', type=str, default='blended', help='The name of the dataset. Should be identical to the dataloader source file. e.g. blended refers to data/blended.py.')
 parser.add_argument('--model_name', type=str, default='model_cas', help='The name of the model. Should be identical to the model source file. e.g. model_cas refers to core/model_cas.py.')
 
@@ -42,15 +49,19 @@ parser.add_argument('--occ_guide', action='store_true', default=False, help='Dep
 parser.add_argument('--load_path', type=str, default=None, help='The dir of the folder containing the pretrained checkpoints.')
 parser.add_argument('--load_step', type=int, default=-1, help='The step to load. -1 for the latest one.')
 
-parser.add_argument('--show_result', action='store_true', default=False, help='Set to show the results.')
-parser.add_argument('--write_result', action='store_true', default=False, help='Set to save the results.')
+parser.add_argument('--show_result', action='store_true', help='Set to show the results.')
+parser.add_argument('--write_result', action='store_true', help='Set to save the results.')
 parser.add_argument('--result_dir', type=str, help='The dir to save the results.')
 parser.add_argument('--wandb_name', type=str, help=' ')
+
 args = parser.parse_args()
-
+# sk3d_32000_valpart
+# str = args.wandb_name
+# print(str) 
 wandb.init(project="Vis-MVSNet_sk3d", entity="vis-mvsnet-mvg", name=args.wandb_name)
-
 if __name__ == '__main__':
+    
+
     torch.backends.cudnn.benchmark = True
 
     [resize_width, resize_height], [crop_width, crop_height] = [[int(v) for v in arg_str.split(',')] for arg_str in [args.resize, args.crop]]
@@ -62,7 +73,7 @@ if __name__ == '__main__':
     get_val_loader = importlib.import_module(f'data.{args.dataset_name}').get_val_loader
 
     dataset, loader = get_val_loader(
-        args.data_root, args.num_src,
+        args.data_root, args.list_dir, args.num_src,
         {
             'interval_scale': args.interval_scale,
             'max_d': args.max_d,
@@ -81,7 +92,8 @@ if __name__ == '__main__':
     compute_loss = Loss()
     optimizer = optim.Adam(model.parameters())
     load_model(model, optimizer, args.load_path, args.load_step, val=True)
-    # load_model(model, args.load_path, args.load_step)
+    # load_model(model, args.load_path, args.load_step, val=True)
+    
     print(f'load {os.path.join(args.load_path, str(args.load_step))}')
     model.eval()
 
@@ -125,12 +137,12 @@ if __name__ == '__main__':
             loss_history.append(l1)
             less1_history.append(less1)
             less3_history.append(less3)
-            
+        
         wandb.log({"less1":less1,
-               "less3":less3,
-               "l1":l1,
-               })
-
+                   "less3":less3,
+                   "l1":l1,
+                   })
+        
         if (i % 49 == 0 or True) and (args.show_result or args.write_result):
             abs_err_scaled, in_range = [v.clone().cpu().data.numpy() for v in losses[-2:]]  #MVS
             fused_uncert = -np.log(sum([np.exp(-uncert[0, 0, ...]) for _, (uncert, occ) in pair_results]))

@@ -1,0 +1,7 @@
+.ipynb_checkpoints
+*.log
+*.time
+*.ipynb
+__pycache__
+/pretrained_model
+wandb

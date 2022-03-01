@@ -6,11 +6,25 @@ import cv2
 import numpy as np
 import torch.utils.data as data
 
-from utils.preproc import image_net_center as center_image, mask_depth_image, to_channel_first, resize, random_crop, center_crop, recursive_apply
+from utils.preproc import image_net_center as center_image, mask_depth_image, to_channel_first, resize, bottom_left_crop, random_crop, center_crop, recursive_apply
 from utils.preproc import random_brightness, random_contrast, motion_blur
 from utils.io_utils import load_cam, load_pfm
 from data.data_utils import dict_collate, Until, Cycle
+import PIL
 
+def unpack_float32(ar):
+    r"""Unpacks an array of uint8 quadruplets back to the array of float32 values.
+    Parameters
+    ----------
+    ar : np.naddary
+        of shape [**, 4].
+    Returns
+    -------
+    ar : np.naddary
+        of shape [**]
+    """
+    shape = ar.shape[:-1]
+    return ar.ravel().view(np.float32).reshape(shape)
 
 def load_pair(file: str):
     with open(file) as f:
@@ -35,14 +49,23 @@ def load_pair(file: str):
 
 class Blended(data.Dataset):
 
-    def __init__(self, root, list_file, num_src, read, transforms):
+    def __init__(self, root, list_dir, list_file, num_src, read, transforms):
         super().__init__()
         self.root = root
+        self.list_dir = list_dir
         self.num_src = num_src
+        self.scene_list = []
+        self.light_list = []
         with open(os.path.join(root, list_file)) as f:
-            self.scene_list = [line.strip() for line in f.readlines()]
+            for line in f.readlines():
+                line = line.strip()
+                if len(line) > 0 and line[0] != "#":
+                    elems = line.split()
+                    self.scene_list.append(elems[0])
+                    self.light_list.append(elems[1])
+
         self.pair_list = [
-            load_pair(os.path.join(root, scene, 'cams', 'pair.txt'))
+            load_pair(os.path.join(list_dir, 'pair.txt'))
             for scene in self.scene_list
             ]
         self.index2scene = [[(i, j) for j in range(len(self.pair_list[i]['id_list']))] for i in range(len(self.scene_list))]
@@ -53,13 +76,16 @@ class Blended(data.Dataset):
     
     def _idx2filename(self, scene_idx, img_id, file_type):
         if img_id == 'dummy': return 'dummy'
-        img_id = img_id.zfill(8)
+        depth_id = img_id.zfill(4)
+        cam_id = img_id.zfill(8)
+        img_id = img_id.zfill(4)
+        
         if file_type == 'img':
-            return os.path.join(self.root, self.scene_list[scene_idx], 'blended_images', f'{img_id}.jpg')
+            return os.path.join(self.root, 'processed_scans', 'images/undist', self.scene_list[scene_idx],'tis_right/rgb', self.light_list[scene_idx], f'{img_id}.png')
         if file_type == 'cam':
-            return os.path.join(self.root, self.scene_list[scene_idx], 'cams', f'{img_id}_cam.txt')
+            return os.path.join(self.list_dir, self.scene_list[scene_idx], 'cams', f'{cam_id}_cam.txt')
         if file_type == 'gt':
-            return os.path.join(self.root, self.scene_list[scene_idx], 'rendered_depth_maps', f'{img_id}.pfm')
+            return os.path.join(self.root, 'processed_scans', 'images/depthmaps', self.scene_list[scene_idx], 'stl@tis_right.undist', f'{depth_id}.png')
     
     def __len__(self):
         return len(self.index2scene)
@@ -67,6 +93,7 @@ class Blended(data.Dataset):
     def __getitem__(self, i):
         scene_idx, ref_idx = self.index2scene[i]
         ref_id = self.pair_list[scene_idx]['id_list'][ref_idx]
+        # print(ref_id)
         skip = 0
         if len(self.pair_list[scene_idx][ref_id]['pair']) < self.num_src:
             skip = 1
@@ -74,6 +101,7 @@ class Blended(data.Dataset):
         src_ids = self.pair_list[scene_idx][ref_id]['pair'][:self.num_src]
         if skip: src_ids += ['dummy'] * (self.num_src - len(src_ids))
         ref = self._idx2filename(scene_idx, ref_id, 'img')
+        # print(ref)
         ref_cam = self._idx2filename(scene_idx, ref_id, 'cam')
         srcs = [self._idx2filename(scene_idx, src_id, 'img') for src_id in src_ids]
         srcs_cam = [self._idx2filename(scene_idx, src_id, 'cam') for src_id in src_ids]
@@ -99,7 +127,11 @@ def read(filenames, max_d, interval_scale):
     srcs = [src if src is not None else np.ones_like(ref, dtype=np.uint8) for src in srcs]
     ref_cam, *srcs_cam = [load_cam(fn, max_d, interval_scale) if fn != 'dummy' else None for fn in [ref_cam_name] + srcs_cam_name]
     srcs_cam = [src_cam if src_cam is not None else np.ones_like(ref_cam, dtype=np.float32) for src_cam in srcs_cam]
-    gt = np.expand_dims(load_pfm(gt_name), -1)
+    # gt = np.expand_dims(load_pfm(gt_name), -1)
+    gt = unpack_float32(np.asarray(PIL.Image.open(gt_name)))
+    gt[np.isnan(gt)] = 0
+    gt = np.expand_dims(gt, -1)
+    
     masks = [(np.ones_like(gt)*255).astype(np.uint8) for _ in range(len(srcs))]
     if ref_cam[1,3,0] <= 0:
         skip = 1
@@ -117,14 +149,14 @@ def read(filenames, max_d, interval_scale):
 
 def train_preproc(sample, preproc_args):
     ref, ref_cam, srcs, srcs_cam, gt, masks, skip = [sample[attr] for attr in ['ref', 'ref_cam', 'srcs', 'srcs_cam', 'gt', 'masks', 'skip']]
-
+    # [print(img.shape) for img in [ref]+srcs]
     ref, *srcs = [random_contrast(img, strength_range=[0.3, 1.5]) for img in [ref] + srcs]
     ref, *srcs = [random_brightness(img, max_abs_change=50) for img in [ref] + srcs]
     ref, *srcs = [motion_blur(img, max_kernel_size=3) for img in [ref] + srcs]
 
     ref, *srcs = [center_image(img) for img in [ref] + srcs]
     ref, ref_cam, srcs, srcs_cam, gt, masks = resize([ref, ref_cam, srcs, srcs_cam, gt, masks], preproc_args['resize_width'], preproc_args['resize_height'])
-    ref, ref_cam, srcs, srcs_cam, gt, masks = center_crop([ref, ref_cam, srcs, srcs_cam, gt, masks], preproc_args['crop_width'], preproc_args['crop_height'])
+    ref, ref_cam, srcs, srcs_cam, gt, masks = bottom_left_crop([ref, ref_cam, srcs, srcs_cam, gt, masks], preproc_args['crop_width'], preproc_args['crop_height'])
     ref, *srcs, gt = to_channel_first([ref] + srcs + [gt])
     masks = to_channel_first(masks)
 
@@ -141,9 +173,9 @@ def train_preproc(sample, preproc_args):
     }
 
 #training_list.txt
-def get_train_loader(root, num_src, total_steps, batch_size, preproc_args, num_workers=0):
+def get_train_loader(root, list_dir, num_src, total_steps, batch_size, preproc_args, num_workers=0):
     dataset = Blended(
-        root, 'BlendedMVG_training.txt', num_src,
+        root, list_dir, 'lists/train_list.txt', num_src,
         read=lambda filenames: read(filenames, preproc_args['max_d'], preproc_args['interval_scale']),
         transforms=[lambda sample: train_preproc(sample, preproc_args)]
     )
@@ -157,7 +189,7 @@ def val_preproc(sample, preproc_args):
 
     ref, *srcs = [center_image(img) for img in [ref] + srcs]
     ref, ref_cam, srcs, srcs_cam, gt, masks = resize([ref, ref_cam, srcs, srcs_cam, gt, masks], preproc_args['resize_width'], preproc_args['resize_height'])
-    ref, ref_cam, srcs, srcs_cam, gt, masks = center_crop([ref, ref_cam, srcs, srcs_cam, gt, masks], preproc_args['crop_width'], preproc_args['crop_height'])
+    ref, ref_cam, srcs, srcs_cam, gt, masks = bottom_left_crop([ref, ref_cam, srcs, srcs_cam, gt, masks], preproc_args['crop_width'], preproc_args['crop_height'])
     ref, *srcs, gt = to_channel_first([ref] + srcs + [gt])
     masks = to_channel_first(masks)
 
@@ -174,9 +206,9 @@ def val_preproc(sample, preproc_args):
     }
 
 
-def get_val_loader(root, num_src, preproc_args):
+def get_val_loader(root, list_dir, num_src, preproc_args):
     dataset = Blended(
-        root, 'validation_list.txt', num_src,
+        root, list_dir, 'lists/val_list.txt', num_src,
         read=lambda filenames: read(filenames, preproc_args['max_d'], preproc_args['interval_scale']),
         transforms=[lambda sample: val_preproc(sample, preproc_args)]
     )

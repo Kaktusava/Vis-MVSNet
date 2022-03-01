@@ -341,13 +341,18 @@ if __name__ == '__main__':
 
     # depth range and interval
     depth_ranges = {}
+    k = 0
     for i in range(num_images):
         zs = []
-        for p3d_id in images[i+1].point3D_ids:
+        print(k)
+        k += 1
+        for p3d_id in images[i+1].point3D_ids:            
             if p3d_id == -1:
                 continue
             transformed = np.matmul(extrinsic[i+1], [points3d[p3d_id].xyz[0], points3d[p3d_id].xyz[1], points3d[p3d_id].xyz[2], 1])
             zs.append(np.asscalar(transformed[2]))
+         
+        print('asdas')    
         zs_sorted = sorted(zs)
         # relaxed depth range
         depth_min = zs_sorted[int(len(zs) * .01)]

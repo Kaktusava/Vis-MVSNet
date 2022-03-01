@@ -153,6 +153,44 @@ def write_pfm(file: str, image, scale=1):
         image.tofile(f)
 
 
+# def save_model(obj, save_dir: str, job_name: str, global_step: int, max_keep: int):
+#     os.makedirs(os.path.join(save_dir, job_name), exist_ok=True)
+#     record_file = os.path.join(save_dir, job_name, 'record')
+#     cktp_file = os.path.join(save_dir, job_name, f'{global_step}.tar')
+#     if not os.path.exists(record_file):
+#         with open(record_file, 'w+') as f:
+#             json.dump([], f)
+#     with open(record_file, 'r') as f:
+#         record = json.load(f)
+#     record.append(global_step)
+#     if len(record) > max_keep:
+#         old = record[0]
+#         record = record[1:]
+#         os.remove(os.path.join(save_dir, job_name, f'{old}.tar'))
+#     torch.save(obj, cktp_file)
+#     with open(record_file, 'w') as f:
+#         json.dump(record, f)
+
+
+# def load_model(model: nn.Module, optimizer, load_path: str, load_step: int, val = False):
+#     if load_step is None:
+#         model.load_state_dict(torch.load(load_path)['state_dict'])
+#         return 0
+#     else:
+#         if load_step == -1:
+#             record_file = os.path.join(load_path, 'record')
+#             with open(record_file, 'r') as f:
+#                 record = json.load(f)
+#             if len(record) == 0:
+#                 raise Exception('no latest model.')
+#             load_step = record[-1]
+#         cktp_file = os.path.join(load_path, f'{load_step}.tar')
+#         model.load_state_dict(torch.load(cktp_file)['state_dict'], strict=True)
+#         if not val:
+#             optimizer.load_state_dict(torch.load(cktp_file)['optimizer_state_dict'])
+#         return torch.load(cktp_file)['global_step']
+
+
 def save_model(obj, save_dir: str, job_name: str, global_step: int, max_keep: int):
     os.makedirs(os.path.join(save_dir, job_name), exist_ok=True)
     record_file = os.path.join(save_dir, job_name, 'record')
@@ -187,6 +225,8 @@ def load_model(model: nn.Module, load_path: str, load_step: int):
         cktp_file = os.path.join(load_path, f'{load_step}.tar')
         model.load_state_dict(torch.load(cktp_file)['state_dict'], strict=True)
         return torch.load(cktp_file)['global_step']
+
+
 
 
 def subplot_map(plt_map):

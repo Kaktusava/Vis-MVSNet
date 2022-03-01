@@ -16,8 +16,9 @@ for m in ['temp']:
     for ns in range(3, 3+1):
         cmd = f"""{d['val_environ']}
             python val.py
-            --data_root /workspace/BlendedMVS
-            --dataset_name blended
+            --data_root /sk3d
+            --list_dir /workspace/list_files
+            --dataset_name our_dataval
             --model_name model_cas
             --num_src {ns}
             --max_d 128
@@ -27,7 +28,7 @@ for m in ['temp']:
             --resize 853,683
             --crop 640,512
             --mode soft
-            --result_dir /workspace/test_mvg_result
+            --result_dir /workspace/mvg_val
             --load_path /workspace/Vis-MVSNet/pretrained_model/sk3d3/{m}
             --wandb_name {args.wandb_name}
             --load_step {args.load_step}

@@ -173,6 +173,27 @@ def center_crop(sample: List[np.ndarray], width, height):
     ]
     return ref_cropped, ref_cam_cropped, srcs_cropped, srcs_cam_cropped, gt_cropped, masks_cropped
 
+def bottom_left_crop(sample: List[np.ndarray], width, height):
+    ref, ref_cam, srcs, srcs_cam, gt, masks = sample[:6]
+    h_o, w_o = ref.shape[:2]
+    start_w = 0
+    start_h = h_o - height
+    finish_w = start_w + width
+    finish_h = start_h + height
+    ref_cropped, *srcs_cropped, gt_cropped = [
+        arr[start_h:finish_h, start_w:finish_w] if w_o != width or h_o != height else arr
+        for arr in [ref] + srcs + [gt]
+    ]
+    masks_cropped = [
+        arr[start_h:finish_h, start_w:finish_w] if w_o != width or h_o != height else arr
+        for arr in masks
+    ]
+    ref_cam_cropped, *srcs_cam_cropped = [
+        crop_camera(cam, (start_w, start_h)) if w_o != width or h_o != height else cam
+        for cam in [ref_cam] + srcs_cam
+    ]
+    return ref_cropped, ref_cam_cropped, srcs_cropped, srcs_cam_cropped, gt_cropped, masks_cropped
+
 
 def random_brightness(img: np.ndarray, max_abs_change=50):
     dv = np.random.randint(-max_abs_change, max_abs_change)

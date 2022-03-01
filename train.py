@@ -22,6 +22,10 @@ from utils.io_utils import load_model, save_model
 from utils.preproc import recursive_apply
 from utils.utils import NanError
 
+import wandb
+
+# wandb.init(project="Vis-MVSNet_MVG", entity="kaktusava")
+wandb.init(project="sk3d_train", entity="vis-mvsnet-mvg")
 
 parser = argparse.ArgumentParser()
 
@@ -29,6 +33,7 @@ parser.add_argument('--num_workers', type=int, default=8, help='The number of wo
 # parser.add_argument('--num_gpus', type=int, default=1)
 
 parser.add_argument('--data_root', type=str, help='The root dir of the data.')
+parser.add_argument('--list_dir', type=str, help='The list dir of the data.')
 parser.add_argument('--dataset_name', type=str, default='blended', help='The name of the dataset. Should be identical to the dataloader source file. e.g. blended refers to data/blended.py.')
 parser.add_argument('--model_name', type=str, default='model_cas', help='The name of the model. Should be identical to the model source file. e.g. model_cas refers to core/model_cas.py.')
 
@@ -43,21 +48,21 @@ parser.add_argument('--crop', type=str, default='640,512', help='The size of the
 parser.add_argument('--mode', type=str, default='soft', choices=['soft', 'hard', 'uwta', 'maxpool', 'average'], help='The fusion strategy.')
 parser.add_argument('--occ_guide', action='store_true', default=False, help='Deprecated')
 
-parser.add_argument('--lr', type=str, default='1e-3,.5e-3,.25e-3,.125e-3', help='Learning rate under piecewise constant scheme.')
-parser.add_argument('--boundaries', type=str, default='.625,.75,.875', help='Boundary percentage for changing the learning rate.')
+parser.add_argument('--lr', type=str, default='1e-3,.5e-3,.25e-3,.125e-3,.0625e-3,.03125e-3,.015625e-3', help='Learning rate under piecewise constant scheme.')
+parser.add_argument('--boundaries', type=str, default='.3125,.375,.4375,.5625,.6875,.74', help='Boundary percentage for changing the learning rate.')
 parser.add_argument('--weight_decay', type=float, default=0, help='Weight decay factor.')
 parser.add_argument('--num_samples', type=int, default=160000, help='Total number =total_step*batch_size of samples for training.')
 parser.add_argument('--batch_size', type=int, default=2, help='Batch size.')
 
 parser.add_argument('--load_path', type=str, default=None, help='The dir of the folder containing the pretrained checkpoints.')
 parser.add_argument('--load_step', type=int, default=-1, help='The step to load. -1 for the latest one.')
-parser.add_argument('--reset_step', action='store_true', default=True, help='Set to reset the global step. Otherwise resume from the step of the checkpoint.')
+parser.add_argument('--reset_step', action='store_true', help='Set to reset the global step. Otherwise resume from the step of the checkpoint.')
 
 parser.add_argument('--job_name', type=str, default='temp', help='Job name for the name of the saved checkpoint.')
 
 parser.add_argument('--save_dir', type=str, help='The dir for saving the checkpoints.')
 
-parser.add_argument('--snapshot', type=int, default=5000, help='Step interval to save a checkpoint.')
+parser.add_argument('--snapshot', type=int, default=1000, help='Step interval to save a checkpoint.')
 parser.add_argument('--max_keep', type=int, default=1000, help='Max number of checkpoints kept.')
 
 args = parser.parse_args()
@@ -84,7 +89,7 @@ if __name__ == '__main__':
     get_train_loader = importlib.import_module(f'data.{args.dataset_name}').get_train_loader
 
     dataset, loader = get_train_loader(
-        args.data_root, args.num_src, total_steps, args.batch_size,
+        args.data_root, args.list_dir, args.num_src, total_steps, args.batch_size,
         {
             'interval_scale': args.interval_scale,
             'max_d': args.max_d,
@@ -103,7 +108,19 @@ if __name__ == '__main__':
     compute_loss = Loss()
 
     model = nn.DataParallel(model)
-
+    
+    
+    # lr = [0.001, 0.0005, 0.00025, 0.000125,  0.0000625, 0.00003125, 0.000015625]
+    # boundaries = [100000, 120000, 140000, 180000, 220000, 260000]
+    
+    lr = [float(v) for v in args.lr.split(',')]
+    boundaries = args.boundaries
+    if boundaries is not None:
+        boundaries = [int(total_steps * float(b)) for b in boundaries.split(',')]
+    
+    optimizer = optim.Adam(model.parameters(), lr=lr[0], weight_decay=args.weight_decay)
+    
+    
     if args.load_path is None:
         for m in model.modules():
             if any([isinstance(m, T) for T in [nn.Conv2d, nn.Conv3d, nn.ConvTranspose2d, nn.ConvTranspose3d]]):
@@ -114,15 +131,15 @@ if __name__ == '__main__':
                 nn.init.constant_(m.bias, 0)
         global_step = 0
     else:
-        global_step = load_model(model, args.load_path, args.load_step)
+        global_step = load_model(model, optimizer, args.load_path, args.load_step, val=False)
         if args.reset_step: global_step = 0
         print(f'load {os.path.join(args.load_path, str(args.load_step))}')
 
-    lr = [float(v) for v in args.lr.split(',')]
-    boundaries = args.boundaries
-    if boundaries is not None:
-        boundaries = [int(total_steps * float(b)) for b in boundaries.split(',')]
-    optimizer = optim.Adam(model.parameters(), lr=lr[0], weight_decay=args.weight_decay)
+    # lr = [float(v) for v in args.lr.split(',')]
+    # boundaries = args.boundaries
+    # if boundaries is not None:
+    #     boundaries = [int(total_steps * float(b)) for b in boundaries.split(',')]
+    
 
     # model, optimizer = amp.initialize(model, optimizer, opt_level='O0')
 
@@ -144,9 +161,7 @@ if __name__ == '__main__':
     for sample in pbar:
         if global_step >= total_steps: break
         if sample.get('skip') is not None and np.any(sample['skip']): continue
-
         curr_lr = piecewise_constant()
-
         recursive_apply(sample, lambda x: torch.from_numpy(x).float().cuda())
         ref, ref_cam, srcs, srcs_cam, gt, masks = [sample[attr] for attr in ['ref', 'ref_cam', 'srcs', 'srcs_cam', 'gt', 'masks']]
 
@@ -156,9 +171,21 @@ if __name__ == '__main__':
             outputs, refined_depth, prob_maps = model(sample, cas_depth_num, cas_interv_scale, mode=args.mode)
 
             # losses = compute_loss([est_depth, pair_results], gt, masks, ref_cam, args.max_d, occ_guide=args.occ_guide, mode=args.mode)
+            # print('gt: ',type(gt))
+            # print('masks: ',type(masks))
+            # print('ref_cam: ',type(ref_cam))
+            # print('outputs: ',type(outputs))
+            # print('refined_depth: ',type(refined_depth))
             losses = compute_loss([outputs, refined_depth], gt, masks, ref_cam, args.max_d, occ_guide=args.occ_guide, mode=args.mode)
             
+            
             loss, uncert_loss, less1, less3, l1 = losses[:5]  #MVS
+            # print("loss", loss)
+            # print("loss",loss)
+            # print("uncert_loss",uncert_loss)
+            # print("less1",less1)
+            # print("less3",less3)
+            # print("l1",l1)
             # loss, less1, less3, l1 = losses[:4]
 
             if np.isnan(loss.item()):
@@ -179,6 +206,24 @@ if __name__ == '__main__':
             pbar.set_description(f'{loss:.3f}{stats_str}{l1:.3f}')
             # pbar.set_description(f'{loss:.4f} {less1:.3f} {less3:.3f} {l1:.4f}')  #MVS
             # pbar.set_description(f'{less1:.3f} {less3:.3f} {l1:.4f}')
+            
+            parameters = [p for p in model.parameters() if p.grad is not None and p.requires_grad]
+            if len(parameters) == 0:
+                total_norm = 0.0
+            else:
+                device = parameters[0].grad.device
+                total_norm = torch.norm(torch.stack([torch.norm(p.grad.detach()).to(device) for p in parameters]), 2.0).item()
+            
+            wandb.log({"loss": loss,
+                       "loss":loss,
+                       "uncert_loss":uncert_loss,
+                       "less1":less1,
+                       "less3":less3,
+                       "l1":l1,
+                       "curr_lr":curr_lr,
+                      "total_norm":total_norm
+                      })
+            
         except NanError:
             print(f'nan: {global_step}/{total_steps}')
             gc.collect()
@@ -189,7 +234,8 @@ if __name__ == '__main__':
         if global_step != 0 and global_step % args.snapshot == 0:
             save_model({
                 'global_step': global_step,
-                'state_dict': model.state_dict()
+                'state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict()
             }, args.save_dir, args.job_name, global_step, args.max_keep)
 
         global_step += 1
@@ -197,5 +243,6 @@ if __name__ == '__main__':
 
     save_model({
         'global_step': global_step,
-        'state_dict': model.state_dict()
+        'state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict()
     }, args.save_dir, args.job_name, global_step, args.max_keep)

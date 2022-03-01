@@ -15,6 +15,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import tqdm
 import matplotlib.pyplot as plt
+import torch.optim as optim
 # from apex import amp
 
 # from core.model_cas import Model, Loss
@@ -26,6 +27,8 @@ from utils.io_utils import load_model, subplot_map, write_cam, write_pfm
 parser = argparse.ArgumentParser()
 
 parser.add_argument('--data_root', type=str, help='The root dir of the data.')
+parser.add_argument('--list_dir', type=str, help='The list dir of the data.')
+parser.add_argument('--part', type=int, help='part number of test list')
 parser.add_argument('--dataset_name', type=str, default='tanksandtemples', help='The name of the dataset. Should be identical to the dataloader source file. e.g. blended refers to data/blended.py.')
 parser.add_argument('--model_name', type=str, default='model_cas', help='The name of the model. Should be identical to the model source file. e.g. model_cas refers to core/model_cas.py.')
 
@@ -61,7 +64,7 @@ if __name__ == '__main__':
     get_val_loader = importlib.import_module(f'data.{args.dataset_name}').get_val_loader
 
     dataset, loader = get_val_loader(
-        args.data_root, args.num_src,
+        args.data_root, args.list_dir, args.part, args.num_src,
         {
             'interval_scale': args.interval_scale,
             'max_d': args.max_d,
@@ -71,21 +74,45 @@ if __name__ == '__main__':
             'crop_height': crop_height
         }
     )
-
+    
+    scene_list = dataset.scene_list
+    light_list = dataset.light_list
+    num_scenes = dataset.index2scene
+    
+    
     model = Model()
     model.cuda()
     # model = amp.initialize(model, opt_level='O0')
     model = nn.DataParallel(model)
     print('Number of model parameters: {}'.format(sum([p.data.nelement() for p in model.parameters() if p.requires_grad])))
-    
-    # load_model(model, optimizer, args.load_path, args.load_step, val=True)
-    load_model(model, args.load_path, args.load_step)
+
+    optimizer = optim.Adam(model.parameters())
+    load_model(model, optimizer, args.load_path, args.load_step, val=True)
+    # load_model(model, args.load_path, args.load_step)
     print(f'load {os.path.join(args.load_path, str(args.load_step))}')
+    del optimizer
     model.eval()
 
+
+#     scene_list = []
+#     light_list = []
+#     with open(os.path.join(args.data_root, 'lists/test_list_tmp.txt')) as f:
+#         for line in f.readlines():
+#             line = line.strip()
+#             if len(line) > 0 and line[0] != "#":
+#                 elems = line.split()
+#                 scene_list.append(elems[0])
+#                 light_list.append(elems[1])
+    
+    
+    
     pbar = tqdm.tqdm(enumerate(loader), dynamic_ncols=True, total=len(loader))
     # pbar = itertools.product(range(num_scan), range(num_ref), range(num_view))
     for i, sample in pbar:
+        # # print(sample)
+        # print(scene_list[num_scenes[i][0]])
+        # print(light_list[num_scenes[i][0]])
+        # print(num_scenes[i][0])
         if sample.get('skip') is not None and np.any(sample['skip']): raise ValueError()
 
         ref, ref_cam, srcs, srcs_cam, gt, masks = [sample[attr] for attr in ['ref', 'ref_cam', 'srcs', 'srcs_cam', 'gt', 'masks']]
@@ -119,6 +146,7 @@ if __name__ == '__main__':
                 subplot_map(plt_map)
                 plt.show()
             if args.write_result:
+                path = os.path.join(args.result_dir,scene_list[num_scenes[i][0]],light_list[num_scenes[i][0]])
                 ref_o = np.transpose(ref[0], [1, 2, 0])
                 ref_o = image_net_center_inv(ref_o)
                 ref_o = cv2.resize(ref_o, (ref_o.shape[1]//2, ref_o.shape[0]//2), interpolation=cv2.INTER_LINEAR)
@@ -126,10 +154,13 @@ if __name__ == '__main__':
                 ref_cam_o = scale_camera(ref_cam_o, .5)
                 est_depth_o = est_depth[0, 0]
                 prob_maps_o = [prob_map[0, 0] for prob_map in prob_maps]
-                cv2.imwrite(os.path.join(args.result_dir, f'{i:08}.jpg'), ref_o)
-                write_cam(os.path.join(args.result_dir, f'cam_{i:08}_flow3.txt'), ref_cam_o)
-                write_pfm(os.path.join(args.result_dir, f'{i:08}_flow3.pfm'), est_depth_o)
+                os.makedirs(path, exist_ok=True)
+                cv2.imwrite(os.path.join(path, f'{num_scenes[i][1]:08}.jpg'), ref_o)
+                write_cam(os.path.join(path, f'cam_{num_scenes[i][1]:08}_flow3.txt'), ref_cam_o)
+                write_pfm(os.path.join(path, f'{num_scenes[i][1]:08}_flow3.pfm'), est_depth_o)
                 for stage_i, prob_map_o in enumerate(prob_maps_o):
-                    write_pfm(os.path.join(args.result_dir, f'{i:08}_flow{stage_i+1}_prob.pfm'), prob_map_o)
+                    write_pfm(os.path.join(path, f'{num_scenes[i][1]:08}_flow{stage_i+1}_prob.pfm'), prob_map_o)
+            
+            
 
         # del pair_results, est_depth

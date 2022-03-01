@@ -5,7 +5,7 @@ import numpy as np
 import torch.utils.data as data
 
 from utils.io_utils import load_cam, load_pfm, load_pair, cam_adjust_max_d
-from utils.preproc import to_channel_first, resize, center_crop, image_net_center as center_image
+from utils.preproc import to_channel_first, resize, bottom_left_crop, center_crop, image_net_center as center_image
 from data.data_utils import dict_collate
 
 
@@ -18,6 +18,7 @@ class MyDataset(data.Dataset):
         self.transforms = transforms
         self.pair = load_pair(os.path.join(self.root, f'pair.txt'))
 
+                   
     def __len__(self):
         return len(self.pair)
 
@@ -25,7 +26,8 @@ class MyDataset(data.Dataset):
         ref_idx = i
         src_idxs = self.pair[ref_idx][:self.num_src]
 
-        ref, *srcs = [os.path.join(self.root, f'images/{idx:08}.jpg') for idx in [ref_idx] + src_idxs]
+        ref, *srcs = [os.path.join(self.root, f'images/{idx:08}.png') for idx in [ref_idx] + src_idxs]
+        # print('assd',ref)
         ref_cam, *srcs_cam = [os.path.join(self.root, f'cams/{idx:08}_cam.txt') for idx in [ref_idx] + src_idxs]
         skip = 0
 
@@ -37,8 +39,11 @@ class MyDataset(data.Dataset):
 
 def read(filenames, max_d, interval_scale):
     ref_name, ref_cam_name, srcs_name, srcs_cam_name, skip = [filenames[attr] for attr in ['ref', 'ref_cam', 'srcs', 'srcs_cam', 'skip']]
+    # print('fes', ref_name)
     ref, *srcs = [cv2.imread(fn) for fn in [ref_name] + srcs_name]
+    # print('dasdasd', cv2.imread(fn))
     ref_cam, *srcs_cam = [load_cam(fn, max_d, interval_scale) for fn in [ref_cam_name] + srcs_cam_name]
+    # print(ref)
     gt = np.zeros((ref.shape[0], ref.shape[1], 1))
     masks = [np.zeros((ref.shape[0], ref.shape[1], 1)) for i in range(len(srcs))]
     return {
@@ -52,12 +57,15 @@ def read(filenames, max_d, interval_scale):
     }
 
 
+
+
+
 def val_preproc(sample, preproc_args):
     ref, ref_cam, srcs, srcs_cam, gt, masks, skip = [sample[attr] for attr in ['ref', 'ref_cam', 'srcs', 'srcs_cam', 'gt', 'masks', 'skip']]
 
     ref, *srcs = [center_image(img) for img in [ref] + srcs]
     ref, ref_cam, srcs, srcs_cam, gt, masks = resize([ref, ref_cam, srcs, srcs_cam, gt, masks], preproc_args['resize_width'], preproc_args['resize_height'])
-    ref, ref_cam, srcs, srcs_cam, gt, masks = center_crop([ref, ref_cam, srcs, srcs_cam, gt, masks], preproc_args['crop_width'], preproc_args['crop_height'])
+    ref, ref_cam, srcs, srcs_cam, gt, masks = bottom_left_crop([ref, ref_cam, srcs, srcs_cam, gt, masks], preproc_args['crop_width'], preproc_args['crop_height'])
     ref, *srcs, gt = to_channel_first([ref] + srcs + [gt])
     masks = to_channel_first(masks)
 

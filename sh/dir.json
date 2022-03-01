@@ -1,10 +1,10 @@
 {
     "local": {
-        "bld_dir": "",
+        "bld_dir": "/workspace/BlendedMVS",
         "dtu_dir": "",
         "tnt_dir": "",
         "tnt_training_dir": "",
-        "save_dir": "",
+        "save_dir": "/workspace/Vis-MVSNet/pretrained_model/mvg2",
         "batch_size": 2,
         "num_workers": 4,
         "train_environ": "",
