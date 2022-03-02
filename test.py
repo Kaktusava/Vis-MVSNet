@@ -99,14 +99,11 @@ if __name__ == '__main__':
             # est_depth = model([ref_t, ref_cam_t, srcs_t, srcs_cam_t, gt_t], args.max_d)
         # est_depth, prob_map = [arr.clone().cpu().data.numpy() for arr in [refined_depth, prob_map]]
         est_depth, *prob_maps = [arr.clone().cpu().data.numpy() for arr in [refined_depth] + prob_maps]
-        torch.save(outputs, f'{args.result_dir}/outputs_{i:03}.pth')
         recursive_apply(pair_results, lambda x: x.clone().cpu().data.numpy())  #MVS
 
         pbar.set_description(f'{est_depth.shape}')
 
         if (i % 49 == 0 or True) and (args.show_result or args.write_result):
-            if i == 0:
-                break
             if args.show_result:
                 # plt_map = [
                 #     [est_depth[0, 0], prob_maps[2][0, 0], None],

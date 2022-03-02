@@ -414,7 +414,6 @@ class Model(nn.Module):
         n, v, c, h, w = srcs.size()
         img_pack = torch.cat([ref, srcs.transpose(0, 1).reshape(v*n, c, h, w)])
         feat_pack_1, feat_pack_2, feat_pack_3 = self.feat_ext(img_pack)
-        torch.save([feat_pack_1, feat_pack_2, feat_pack_3], '/workspace/workspace_main/TnT_test/tmp/features1.pth')
 
         ref_feat_1, *srcs_feat_1 = [feat_pack_1[i*n:(i+1)*n] for i in range(v+1)]
         est_depth_1, prob_map_1, pair_results_1 = self.stage1([ref_feat_1, ref_cam, srcs_feat_1, srcs_cam], depth_num=depth_nums[0], upsample=False, mem=mem, mode=mode, depth_start_override=None, depth_interval_override=depth_interval*interval_scales[0], s_scale=8)
