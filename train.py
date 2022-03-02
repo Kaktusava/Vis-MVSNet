@@ -25,7 +25,7 @@ from utils.utils import NanError
 import wandb
 
 # wandb.init(project="Vis-MVSNet_MVG", entity="kaktusava")
-wandb.init(project="sk3d_train", entity="vis-mvsnet-mvg")
+wandb.init(project="sk3d_train", entity="vis-mvsnet-sk3d_new")
 
 parser = argparse.ArgumentParser()
 
