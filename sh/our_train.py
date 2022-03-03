@@ -21,8 +21,8 @@ cmd = f"""
     --interval_scale 1
     --cas_depth_num 32,16,8
     --cas_interv_scale 4,2,1
-    --resize 853,683 # проверить правильный ресайз
-    --crop 640,512 # проверить правильный кроп
+    --resize 780,648 
+    --crop 640,512
     --mode soft
     --num_samples 320000
     --batch_size 2
