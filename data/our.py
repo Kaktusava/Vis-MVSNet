@@ -47,12 +47,12 @@ def load_pair(file: str):
     return pairs
 
 
-class Blended(data.Dataset):
-
-    def __init__(self, root, list_dir, list_file, num_src, read, transforms):
+class Blended(data.Dataset):   
+    
+# changes for BlenndedMVG    
+    def __init__(self, root, list_file, num_src, read, transforms):
         super().__init__()
         self.root = root
-        self.list_dir = list_dir
         self.num_src = num_src
         self.scene_list = []
         self.light_list = []
@@ -65,7 +65,7 @@ class Blended(data.Dataset):
                     self.light_list.append(elems[1])
 
         self.pair_list = [
-            load_pair(os.path.join(list_dir, scene, 'pair.txt'))
+            load_pair(os.path.join(root, scene, 'pair.txt'))
             for scene in self.scene_list
             ]
         self.index2scene = [[(i, j) for j in range(len(self.pair_list[i]['id_list']))] for i in range(len(self.scene_list))]
@@ -76,16 +76,52 @@ class Blended(data.Dataset):
     
     def _idx2filename(self, scene_idx, img_id, file_type):
         if img_id == 'dummy': return 'dummy'
-        depth_id = img_id.zfill(4)
-        cam_id = img_id.zfill(8)
         img_id = img_id.zfill(4)
         
         if file_type == 'img':
-            return os.path.join(self.root, 'processed_scans', 'images/undist', self.scene_list[scene_idx],'tis_right/rgb', self.light_list[scene_idx], f'{img_id}.png')
+            return os.path.join(self.root, self.scene_list[scene_idx],'blended_images', f'{img_id}.jpg')
         if file_type == 'cam':
-            return os.path.join(self.list_dir, self.scene_list[scene_idx], 'cams', f'{cam_id}_cam.txt')
+            return os.path.join(self.root, self.scene_list[scene_idx], 'cams', f'{cam_id}_cam.txt')
         if file_type == 'gt':
-            return os.path.join(self.root, 'processed_scans', 'images/depthmaps', self.scene_list[scene_idx], 'stl@tis_right.undist', f'{depth_id}.png')
+            return os.path.join(self.root, self.scene_list[scene_idx], 'rendered_depth_maps', f'{img_id}.pfm')
+    
+#     def __init__(self, root, list_dir, list_file, num_src, read, transforms):
+#         super().__init__()
+#         self.root = root
+#         self.list_dir = list_dir
+#         self.num_src = num_src
+#         self.scene_list = []
+#         self.light_list = []
+#         with open(os.path.join(root, list_file)) as f:
+#             for line in f.readlines():
+#                 line = line.strip()
+#                 if len(line) > 0 and line[0] != "#":
+#                     elems = line.split()
+#                     self.scene_list.append(elems[0])
+#                     self.light_list.append(elems[1])
+
+#         self.pair_list = [
+#             load_pair(os.path.join(list_dir, scene, 'pair.txt'))
+#             for scene in self.scene_list
+#             ]
+#         self.index2scene = [[(i, j) for j in range(len(self.pair_list[i]['id_list']))] for i in range(len(self.scene_list))]
+#         self.index2scene = sum(self.index2scene, [])
+#         self.read = read
+#         self.transforms = transforms
+#         print(f'Number of samples: {len(self.index2scene)}')
+    
+#     def _idx2filename(self, scene_idx, img_id, file_type):
+#         if img_id == 'dummy': return 'dummy'
+#         depth_id = img_id.zfill(4)
+#         cam_id = img_id.zfill(8)
+#         img_id = img_id.zfill(4)
+        
+#         if file_type == 'img':
+#             return os.path.join(self.root, 'processed_scans', 'images/undist', self.scene_list[scene_idx],'tis_right/rgb', self.light_list[scene_idx], f'{img_id}.png')
+#         if file_type == 'cam':
+#             return os.path.join(self.list_dir, self.scene_list[scene_idx], 'cams', f'{cam_id}_cam.txt')
+#         if file_type == 'gt':
+#             return os.path.join(self.root, 'processed_scans', 'images/depthmaps', self.scene_list[scene_idx], 'stl@tis_right.undist', f'{depth_id}.png')
     
     def __len__(self):
         return len(self.index2scene)
@@ -127,10 +163,11 @@ def read(filenames, max_d, interval_scale):
     srcs = [src if src is not None else np.ones_like(ref, dtype=np.uint8) for src in srcs]
     ref_cam, *srcs_cam = [load_cam(fn, max_d, interval_scale) if fn != 'dummy' else None for fn in [ref_cam_name] + srcs_cam_name]
     srcs_cam = [src_cam if src_cam is not None else np.ones_like(ref_cam, dtype=np.float32) for src_cam in srcs_cam]
-    # gt = np.expand_dims(load_pfm(gt_name), -1)
-    gt = unpack_float32(np.asarray(PIL.Image.open(gt_name)))
-    gt[np.isnan(gt)] = 0
-    gt = np.expand_dims(gt, -1)
+    # changed depths loader
+    gt = np.expand_dims(load_pfm(gt_name), -1)
+    # gt = unpack_float32(np.asarray(PIL.Image.open(gt_name)))
+    # gt[np.isnan(gt)] = 0
+    # gt = np.expand_dims(gt, -1)
     
     masks = [(np.ones_like(gt)*255).astype(np.uint8) for _ in range(len(srcs))]
     if ref_cam[1,3,0] <= 0:
@@ -173,15 +210,29 @@ def train_preproc(sample, preproc_args):
     }
 
 #training_list.txt
-def get_train_loader(root, list_dir, num_src, total_steps, batch_size, preproc_args, num_workers=0):
+
+# changed train_loader for blendedMVG
+
+# def get_train_loader(root, list_dir, num_src, total_steps, batch_size, preproc_args, num_workers=0):
+#     dataset = Blended(
+#         root, list_dir, 'lists/train_list.txt', num_src,
+#         read=lambda filenames: read(filenames, preproc_args['max_d'], preproc_args['interval_scale']),
+#         transforms=[lambda sample: train_preproc(sample, preproc_args)]
+#     )
+#     loader = data.DataLoader(dataset, batch_size, collate_fn=dict_collate, shuffle=True, num_workers=num_workers, drop_last=True)
+#     cyclic_loader = Until(loader, total_steps)
+#     return dataset, cyclic_loader
+
+def get_train_loader(root, num_src, total_steps, batch_size, preproc_args, num_workers=0):
     dataset = Blended(
-        root, list_dir, 'lists/train_list.txt', num_src,
+        root, 'BlendedMVG_training.txt', num_src,
         read=lambda filenames: read(filenames, preproc_args['max_d'], preproc_args['interval_scale']),
         transforms=[lambda sample: train_preproc(sample, preproc_args)]
     )
     loader = data.DataLoader(dataset, batch_size, collate_fn=dict_collate, shuffle=True, num_workers=num_workers, drop_last=True)
     cyclic_loader = Until(loader, total_steps)
     return dataset, cyclic_loader
+
 
 
 def val_preproc(sample, preproc_args):

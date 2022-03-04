@@ -62,8 +62,8 @@ def load_cam(file: str, max_d, interval_scale=1):
         cam[1][3][2] = 0
         cam[1][3][3] = 0
 
-    cam[1][3][1] *= 2   # FIXME !!!
-    cam[1][3][2] //= 2  # FIXME !!!
+    # cam[1][3][1] *= 2   # FIXME !!!
+    # cam[1][3][2] //= 2  # FIXME !!!
 
     return cam
 

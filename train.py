@@ -25,7 +25,7 @@ from utils.utils import NanError
 import wandb
 
 # wandb.init(project="Vis-MVSNet_MVG", entity="kaktusava")
-wandb.init(project="sk3d_train", entity="vis-mvsnet-mvg")
+wandb.init(project="vis-mvsnet-mvg_sk3dSetup", entity="kaktusava")
 
 parser = argparse.ArgumentParser()
 
@@ -89,7 +89,7 @@ if __name__ == '__main__':
     get_train_loader = importlib.import_module(f'data.{args.dataset_name}').get_train_loader
 
     dataset, loader = get_train_loader(
-        args.data_root, args.list_dir, args.num_src, total_steps, args.batch_size,
+        args.data_root, args.num_src, total_steps, args.batch_size,
         {
             'interval_scale': args.interval_scale,
             'max_d': args.max_d,
