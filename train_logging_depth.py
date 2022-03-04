@@ -22,6 +22,9 @@ from utils.io_utils import load_model, save_model
 from utils.preproc import recursive_apply
 from utils.utils import NanError
 
+from matplotlib import cm as cm
+from PIL import Image
+
 import wandb
 
 # wandb.init(project="Vis-MVSNet_MVG", entity="kaktusava")
@@ -51,7 +54,7 @@ parser.add_argument('--occ_guide', action='store_true', default=False, help='Dep
 # parser.add_argument('--lr', type=str, default='1e-3,.5e-3,.25e-3,.125e-3,.0625e-3,.03125e-3,.015625e-3', help='Learning rate under piecewise constant scheme.')
 # parser.add_argument('--boundaries', type=str, default='.3125,.375,.4375,.5625,.6875,.74', help='Boundary percentage for changing the learning rate.')
 
-parser.add_argument('--lr', type=str, default='1e-1,.5e-3,.25e-3,.125e-3,.0625e-3,.03125e-3,.015625e-3', help='Learning rate under piecewise constant scheme.')
+parser.add_argument('--lr', type=str, default='1e-3,.5e-3,.25e-3,.125e-3,.0625e-3,.03125e-3,.015625e-3', help='Learning rate under piecewise constant scheme.')
 parser.add_argument('--boundaries', type=str, default='.3125,.375,.4375,.5625,.6875,.74', help='Boundary percentage for changing the learning rate.')
 
 
@@ -68,6 +71,9 @@ parser.add_argument('--job_name', type=str, default='temp', help='Job name for t
 parser.add_argument('--save_dir', type=str, help='The dir for saving the checkpoints.')
 
 parser.add_argument('--snapshot', type=int, default=100, help='Step interval to save a checkpoint.')
+
+parser.add_argument('--depth_save', type=int, default=1, help='Step interval to save a depth.')
+
 parser.add_argument('--max_keep', type=int, default=1000, help='Max number of checkpoints kept.')
 
 args = parser.parse_args()
@@ -219,6 +225,22 @@ if __name__ == '__main__':
                 device = parameters[0].grad.device
                 total_norm = torch.norm(torch.stack([torch.norm(p.grad.detach()).to(device) for p in parameters]), 2.0).item()
             
+            #Add logging depths
+            
+            if global_step != 0 and global_step % args.depth_save == 0:
+                [[est_depth_1, pair_results_1], [est_depth_2, pair_results_2], [est_depth_3, pair_results]] = outputs
+                d = np.flipud(est_depth_3.cpu().detach().numpy())
+                dmin = gt[gt != 0].cpu().detach().numpy().min()
+                dmax = gt[gt != 0].cpu().detach().numpy().max()
+                d = (d - dmin) / (dmax - dmin)
+                d = cm.plasma_r(d)[..., :3]
+                d = np.clip(d * 255, 0, 255).astype(np.uint8)
+                d_image = Image.fromarray(d[0,0])
+                wandb.log({b
+                       "samples": wandb.Image(d_image, caption=f'{global_step} iteration')
+                      })
+                del est_depth_1, pair_results_1, est_depth_2, pair_results_2, est_depth_3, pair_results, d, dmin, dmax, d_image
+                
             wandb.log({"loss": loss,
                        "loss":loss,
                        "uncert_loss":uncert_loss,

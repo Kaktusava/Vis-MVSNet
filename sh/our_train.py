@@ -10,7 +10,7 @@ import argparse
     # d = json.load(f)
 # d = d[args.machine]
 cmd = f"""
-    python train.py
+    python train_logging_depth.py
     --num_workers 4
     --data_root /workspace/workspace_main/BlendedMVG
     --dataset_name our
@@ -26,7 +26,7 @@ cmd = f"""
     --num_samples 320000
     --batch_size 2
     --job_name temp
-    --save_dir /workspace/workspace_main/Vis-MVSNet/pretrained_model/mvg_ourSetup
+    --save_dir /workspace/workspace_main/Vis-MVSNet/pretrained_model/mvg_ourSetup_lr_100
     
 """
 cmd = ' '.join(cmd.strip().split())
