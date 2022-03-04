@@ -48,8 +48,13 @@ parser.add_argument('--crop', type=str, default='640,512', help='The size of the
 parser.add_argument('--mode', type=str, default='soft', choices=['soft', 'hard', 'uwta', 'maxpool', 'average'], help='The fusion strategy.')
 parser.add_argument('--occ_guide', action='store_true', default=False, help='Deprecated')
 
-parser.add_argument('--lr', type=str, default='1e-3,.5e-3,.25e-3,.125e-3,.0625e-3,.03125e-3,.015625e-3', help='Learning rate under piecewise constant scheme.')
+# parser.add_argument('--lr', type=str, default='1e-3,.5e-3,.25e-3,.125e-3,.0625e-3,.03125e-3,.015625e-3', help='Learning rate under piecewise constant scheme.')
+# parser.add_argument('--boundaries', type=str, default='.3125,.375,.4375,.5625,.6875,.74', help='Boundary percentage for changing the learning rate.')
+
+parser.add_argument('--lr', type=str, default='.7e-3,.5e-3,.25e-3,.125e-3,.0625e-3,.03125e-3,.015625e-3', help='Learning rate under piecewise constant scheme.')
 parser.add_argument('--boundaries', type=str, default='.3125,.375,.4375,.5625,.6875,.74', help='Boundary percentage for changing the learning rate.')
+
+
 parser.add_argument('--weight_decay', type=float, default=0, help='Weight decay factor.')
 parser.add_argument('--num_samples', type=int, default=160000, help='Total number =total_step*batch_size of samples for training.')
 parser.add_argument('--batch_size', type=int, default=2, help='Batch size.')

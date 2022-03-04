@@ -26,7 +26,7 @@ for m in ['temp']:
             --cas_depth_num 32,16,8
             --cas_interv_scale 4,2,1
             --resize 853,683
-            --crop 640,512
+            --crop 640,512 
             --mode soft
             --result_dir /workspace/mvg_val
             --load_path /workspace/Vis-MVSNet/pretrained_model/sk3d3/{m}
