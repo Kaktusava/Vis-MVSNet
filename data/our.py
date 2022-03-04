@@ -49,23 +49,16 @@ def load_pair(file: str):
 
 class Blended(data.Dataset):   
     
+        
 # changes for BlenndedMVG    
     def __init__(self, root, list_file, num_src, read, transforms):
         super().__init__()
         self.root = root
         self.num_src = num_src
-        self.scene_list = []
-        self.light_list = []
         with open(os.path.join(root, list_file)) as f:
-            for line in f.readlines():
-                line = line.strip()
-                if len(line) > 0 and line[0] != "#":
-                    elems = line.split()
-                    self.scene_list.append(elems[0])
-                    self.light_list.append(elems[1])
-
+            self.scene_list = [line.strip() for line in f.readlines()]
         self.pair_list = [
-            load_pair(os.path.join(root, scene, 'pair.txt'))
+            load_pair(os.path.join(root, scene, 'cams', 'pair.txt'))
             for scene in self.scene_list
             ]
         self.index2scene = [[(i, j) for j in range(len(self.pair_list[i]['id_list']))] for i in range(len(self.scene_list))]
@@ -76,12 +69,12 @@ class Blended(data.Dataset):
     
     def _idx2filename(self, scene_idx, img_id, file_type):
         if img_id == 'dummy': return 'dummy'
-        img_id = img_id.zfill(4)
+        img_id = img_id.zfill(8)
         
         if file_type == 'img':
             return os.path.join(self.root, self.scene_list[scene_idx],'blended_images', f'{img_id}.jpg')
         if file_type == 'cam':
-            return os.path.join(self.root, self.scene_list[scene_idx], 'cams', f'{cam_id}_cam.txt')
+            return os.path.join(self.root, self.scene_list[scene_idx], 'cams', f'{img_id}_cam.txt')
         if file_type == 'gt':
             return os.path.join(self.root, self.scene_list[scene_idx], 'rendered_depth_maps', f'{img_id}.pfm')
     
